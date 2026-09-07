@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>bandit-exp — benchmark results</title>
+<style>
+  :root {
+    --bg: #0f1220;
+    --panel: #1a1f35;
+    --panel2: #232a45;
+    --text: #e7ebf5;
+    --muted: #9aa4c4;
+    --grid: #313a5c;
+    --good: #37d67a;
+    --bad: #ff6b6b;
+    --accent: #6c8cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  header {
+    padding: 28px 32px 12px;
+    border-bottom: 1px solid var(--grid);
+  }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .config {
+    display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px;
+    font-size: 13px; color: var(--muted);
+  }
+  .config b { color: var(--text); }
+  main { padding: 24px 32px 64px; }
+  .controls { margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  select {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--grid);
+    border-radius: 8px; padding: 7px 10px; font-size: 14px;
+  }
+  .env-block {
+    background: var(--panel); border: 1px solid var(--grid);
+    border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;
+  }
+  .env-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+  .env-name { font-size: 17px; font-weight: 650; }
+  .env-tag { font-size: 12px; color: var(--muted); background: var(--panel2); padding: 3px 9px; border-radius: 999px; }
+  .rows { display: flex; flex-direction: column; gap: 9px; }
+  .row { display: grid; grid-template-columns: 160px 1fr 96px; align-items: center; gap: 12px; }
+  .alg { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .best .alg { color: var(--good); font-weight: 700; }
+  .bar-track { background: var(--panel2); border-radius: 7px; height: 22px; overflow: hidden; position: relative; }
+  .bar-fill { height: 100%; border-radius: 7px 0 0 7px; transition: width .6s ease; }
+  .val { font-variant-numeric: tabular-nums; text-align: right; font-size: 13px; color: var(--muted); }
+  .best .val { color: var(--good); }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  footer { padding: 0 32px 40px; color: var(--muted); font-size: 12px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>bandit-exp — ベンチマーク結果</h1>
+  <div class="sub">全アルゴリズム × 全環境の比較（各環境でシード固定・同一報酬系列で公平に評価）</div>
+  <div class="config" id="config"></div>
+</header>
+
+<main>
+  <div class="controls">
+    <label for="metric">指標:</label>
+    <select id="metric">
+      <option value="mean_cumulative_regret">累積リグレット (低いほど良い)</option>
+      <option value="mean_final_ctr">最終CTR (高いほど良い)</option>
+    </select>
+  </div>
+  <div id="charts"></div>
+  <div class="legend" id="legend"></div>
+</main>
+
+<footer>
+  Source: <a href="https://github.com/khattori-dw/bandit-exp">khattori-dw/bandit-exp</a> ·
+  Data snapshot: <code>benchmark-20260907-084911.json</code>
+  (horizon=2000, 20 trials/pair) · self-contained, no external dependencies.
+</footer>
+
+<script>
+// ---- Embedded benchmark data (from results/benchmark-20260907-084911.json) ----
+const DATA = {
+  "config": { "horizon": 2000, "num_trials": 20, "base_seed": 12345, "elapsed_seconds": 4.53 },
+  "environments": {
+    "stationary_easy": {
+      "Random": { "mean_final_ctr": 0.2684, "mean_cumulative_regret": 465.48 },
+      "EGreedy(0.01)": { "mean_final_ctr": 0.44785, "mean_cumulative_regret": 105.95 },
+      "EGreedy(0.1)": { "mean_final_ctr": 0.474925, "mean_cumulative_regret": 52.47 },
+      "ThomsonSampling": { "mean_final_ctr": 0.4946, "mean_cumulative_regret": 13.295 },
+      "UCB1": { "mean_final_ctr": 0.4712, "mean_cumulative_regret": 59.25 },
+      "UCB1Tuned": { "mean_final_ctr": 0.495825, "mean_cumulative_regret": 10.27 }
+    },
+    "gap_hard": {
+      "Random": { "mean_final_ctr": 0.483575, "mean_cumulative_regret": 35.991 },
+      "EGreedy(0.01)": { "mean_final_ctr": 0.483325, "mean_cumulative_regret": 36.409 },
+      "EGreedy(0.1)": { "mean_final_ctr": 0.483425, "mean_cumulative_regret": 35.575 },
+      "ThomsonSampling": { "mean_final_ctr": 0.484525, "mean_cumulative_regret": 34.562 },
+      "UCB1": { "mean_final_ctr": 0.4836, "mean_cumulative_regret": 35.349 },
+      "UCB1Tuned": { "mean_final_ctr": 0.4838, "mean_cumulative_regret": 35.296 }
+    },
+    "gap_easy": {
+      "Random": { "mean_final_ctr": 0.2776, "mean_cumulative_regret": 449.8875 },
+      "EGreedy(0.01)": { "mean_final_ctr": 0.333925, "mean_cumulative_regret": 331.1625 },
+      "EGreedy(0.1)": { "mean_final_ctr": 0.430525, "mean_cumulative_regret": 140.55 },
+      "ThomsonSampling": { "mean_final_ctr": 0.46625, "mean_cumulative_regret": 70.5125 },
+      "UCB1": { "mean_final_ctr": 0.3761, "mean_cumulative_regret": 250.325 },
+      "UCB1Tuned": { "mean_final_ctr": 0.473775, "mean_cumulative_regret": 53.075 }
+    },
+    "drifting": {
+      "Random": { "mean_final_ctr": 0.4003, "mean_cumulative_regret": 303.640635 },
+      "EGreedy(0.01)": { "mean_final_ctr": 0.414625, "mean_cumulative_regret": 271.467525 },
+      "EGreedy(0.1)": { "mean_final_ctr": 0.417225, "mean_cumulative_regret": 268.928205 },
+      "ThomsonSampling": { "mean_final_ctr": 0.4646, "mean_cumulative_regret": 173.006865 },
+      "UCB1": { "mean_final_ctr": 0.5151, "mean_cumulative_regret": 73.356945 },
+      "UCB1Tuned": { "mean_final_ctr": 0.5099, "mean_cumulative_regret": 83.83968 }
+    },
+    "abrupt_change": {
+      "Random": { "mean_final_ctr": 0.297825, "mean_cumulative_regret": 606.405 },
+      "EGreedy(0.01)": { "mean_final_ctr": 0.360125, "mean_cumulative_regret": 480.64 },
+      "EGreedy(0.1)": { "mean_final_ctr": 0.355925, "mean_cumulative_regret": 490.49 },
+      "ThomsonSampling": { "mean_final_ctr": 0.4553, "mean_cumulative_regret": 292.935 },
+      "UCB1": { "mean_final_ctr": 0.568425, "mean_cumulative_regret": 70.215 },
+      "UCB1Tuned": { "mean_final_ctr": 0.562125, "mean_cumulative_regret": 82.33 }
+    }
+  }
+};
+
+const ENV_DESC = {
+  stationary_easy: "定常ベルヌーイ（3本, 固定CTR）",
+  gap_hard:        "難問（10本, gap=0.02）",
+  gap_easy:        "易問（10本, gap=0.25）",
+  drifting:        "非定常・線形ドリフト（3本）",
+  abrupt_change:   "非定常・急変（3本, t=1000で反転）"
+};
+
+// higher-is-better metrics
+const HIGHER_BETTER = new Set(["mean_final_ctr"]);
+
+function fmt(v, metric) {
+  return metric === "mean_final_ctr" ? v.toFixed(4) : v.toFixed(2);
+}
+
+function render() {
+  const metric = document.getElementById("metric").value;
+  const higher = HIGHER_BETTER.has(metric);
+  const charts = document.getElementById("charts");
+  charts.innerHTML = "";
+
+  for (const [envName, algs] of Object.entries(DATA.environments)) {
+    const entries = Object.entries(algs).map(([name, m]) => ({ name, val: m[metric] }));
+    const max = Math.max(...entries.map(e => e.val));
+    // best = min for regret, max for ctr
+    const bestVal = higher ? Math.max(...entries.map(e => e.val)) : Math.min(...entries.map(e => e.val));
+
+    // sort: best first
+    entries.sort((a, b) => higher ? b.val - a.val : a.val - b.val);
+
+    const block = document.createElement("div");
+    block.className = "env-block";
+    block.innerHTML = `
+      <div class="env-head">
+        <span class="env-name">${envName}</span>
+        <span class="env-tag">${ENV_DESC[envName] || ""}</span>
+      </div>
+      <div class="rows"></div>`;
+    const rows = block.querySelector(".rows");
+
+    for (const e of entries) {
+      const isBest = e.val === bestVal;
+      const pct = max > 0 ? (e.val / max) * 100 : 0;
+      // color: green for good end of scale, red for bad
+      const goodness = higher ? e.val / max : 1 - (e.val / max);
+      const hue = 0 + goodness * 130; // 0=red -> 130=green
+      const row = document.createElement("div");
+      row.className = "row" + (isBest ? " best" : "");
+      row.innerHTML = `
+        <div class="alg">${isBest ? "★ " : ""}${e.name}</div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${pct}%; background:hsl(${hue},70%,55%)"></div>
+        </div>
+        <div class="val">${fmt(e.val, metric)}</div>`;
+      rows.appendChild(row);
+    }
+    charts.appendChild(block);
+  }
+
+  document.getElementById("legend").textContent = higher
+    ? "★ = 各環境で最良（最終CTRが最大）。バーが長い/緑ほど良い。"
+    : "★ = 各環境で最良（累積リグレットが最小）。バーが短い/緑ほど良い。";
+}
+
+// config summary
+const c = DATA.config;
+document.getElementById("config").innerHTML =
+  `<span>horizon: <b>${c.horizon}</b></span>` +
+  `<span>trials/組: <b>${c.num_trials}</b></span>` +
+  `<span>base seed: <b>${c.base_seed}</b></span>` +
+  `<span>実行時間: <b>${c.elapsed_seconds}s</b></span>`;
+
+document.getElementById("metric").addEventListener("change", render);
+render();
+</script>
+</body>
+</html>

@@ -2,6 +2,8 @@
 
 ![](https://img.shields.io/badge/python-3.13%2B-brightgreen?style=flat-square)
 
+**📊 Live results:** https://khattori-dw.github.io/bandit-exp/
+
 A small harness for **fairly comparing multi-armed bandit algorithms**
 across a suite of benchmark problem settings. It has no third-party
 runtime dependencies — only the Python standard library.
@@ -45,3 +47,12 @@ printed to stdout.
 ```bash
 uv run pytest -q           # or: make test
 ```
+
+## Results visualization
+
+[`docs/index.html`](docs/index.html) is a self-contained page (no external
+dependencies) that visualizes a benchmark run — mean cumulative regret and
+mean final CTR per environment, toggleable by metric. It is published via
+GitHub Pages at https://khattori-dw.github.io/bandit-exp/. To refresh it,
+re-run the benchmark and paste the new JSON into the `DATA` object in
+`docs/index.html`.
