@@ -56,23 +56,22 @@
   .panel-view { display: none; }
   .panel-view.active { display: block; }
 
-  /* Results */
-  .controls { margin-bottom: 12px; display: flex; align-items: center; gap: 12px; }
-  .controls label { font-size: 13px; color: var(--muted); }
-  .metric-info {
-    background: var(--panel); border: 1px solid var(--grid); border-left: 3px solid var(--accent);
-    border-radius: 0 10px 10px 0; padding: 12px 16px; margin-bottom: 22px; max-width: 780px;
+  /* Results — two metrics shown side by side */
+  .metric-headers {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 16px;
   }
-  .metric-desc { font-size: 13.5px; color: var(--text); }
-  .metric-formula { margin-top: 6px; font-size: 15px; color: var(--muted); overflow-x: auto; }
+  .metric-col-head {
+    background: var(--panel); border: 1px solid var(--grid); border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0; padding: 12px 16px;
+  }
+  .metric-col-head .mh-title { font-size: 15px; font-weight: 650; }
+  .metric-col-head .mh-desc { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  .metric-col-head .mh-formula { margin-top: 6px; font-size: 14px; color: var(--text); overflow-x: auto; }
   /* Hide the formula until it is typeset (MathJax) or a plain fallback is
      substituted, so raw "\( ... \)" LaTeX never flashes on screen. */
-  .metric-formula:not(.ready) { visibility: hidden; }
-  .metric-formula.plain { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  select {
-    background: var(--panel2); color: var(--text); border: 1px solid var(--grid);
-    border-radius: 8px; padding: 7px 10px; font-size: 14px;
-  }
+  .mh-formula:not(.ready) { visibility: hidden; }
+  .mh-formula.plain { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; color: var(--muted); }
+
   .env-block {
     background: var(--panel); border: 1px solid var(--grid);
     border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;
@@ -80,8 +79,11 @@
   .env-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
   .env-name { font-size: 17px; font-weight: 650; }
   .env-tag { font-size: 12px; color: var(--muted); background: var(--panel2); padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  /* Two panes: cumulative regret (left) and final CTR (right). */
+  .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .pane-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
   .rows { display: flex; flex-direction: column; gap: 9px; }
-  .row { display: grid; grid-template-columns: 160px 1fr 96px; align-items: center; gap: 12px; }
+  .row { display: grid; grid-template-columns: 128px 1fr 72px; align-items: center; gap: 10px; }
   .alg { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .best .alg { color: var(--good); font-weight: 700; }
   .bar-track { background: var(--panel2); border-radius: 7px; height: 22px; overflow: hidden; }
@@ -89,6 +91,11 @@
   .val { font-variant-numeric: tabular-nums; text-align: right; font-size: 13px; color: var(--muted); }
   .best .val { color: var(--good); }
   .legend { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* Stack the two metric columns on narrow screens. */
+  @media (max-width: 760px) {
+    .metric-headers, .panes { grid-template-columns: 1fr; }
+  }
 
   /* Cards (benchmarks / algorithms) */
   .card {
@@ -132,16 +139,9 @@
 <main>
   <!-- ===== Results ===== -->
   <section class="panel-view active" id="view-results">
-    <div class="controls">
-      <label for="metric">指標:</label>
-      <select id="metric">
-        <option value="mean_cumulative_regret">累積リグレット (低いほど良い)</option>
-        <option value="mean_final_ctr">最終CTR (高いほど良い)</option>
-      </select>
-    </div>
-    <div class="metric-info" id="metric-info">
-      <div class="metric-desc" id="metric-desc"></div>
-      <div class="metric-formula" id="metric-formula"></div>
+    <div class="metric-headers">
+      <div class="metric-col-head" id="head-regret"></div>
+      <div class="metric-col-head" id="head-ctr"></div>
     </div>
     <div id="charts"></div>
     <div class="legend" id="legend"></div>
@@ -319,22 +319,26 @@ const METRIC_INFO = {
   }
 };
 
-// Render the formula: prefer MathJax; if it hasn't loaded within a short
+// Render LaTeX into `el`: prefer MathJax; if it hasn't loaded within a short
 // window (e.g. CDN blocked/offline), fall back to a readable plain-text form.
 // Either way the element is only revealed once it holds nice output, so raw
 // LaTeX source never flashes on screen.
-function renderFormula(el, info) {
+//   tex    : bare LaTeX (no delimiters)
+//   plain  : plain-text fallback
+//   display: true for display math ($$...$$), false for inline (\(...\))
+function renderMath(el, tex, plain, display) {
   el.classList.remove("ready", "plain");
+  const wrapped = display ? ("$$" + tex + "$$") : ("\\(" + tex + "\\)");
 
   function showPlain() {
     el.classList.add("plain", "ready");
-    el.textContent = info.plain;
+    el.textContent = plain;
   }
 
   function tryMathJax(attemptsLeft) {
     if (window.MathJax && window.MathJax.typesetPromise) {
       el.classList.remove("plain");
-      el.textContent = info.tex;
+      el.textContent = wrapped;
       window.MathJax.typesetClear && window.MathJax.typesetClear([el]);
       window.MathJax.typesetPromise([el])
         .then(() => el.classList.add("ready"))
@@ -353,35 +357,36 @@ function esc(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": 
 
 // ---- Results tab ----
 function renderResults() {
-  const metric = document.getElementById("metric").value;
-  const higher = HIGHER_BETTER.has(metric);
+  // The two metrics are shown side by side (left: regret, right: CTR).
+  const METRICS = [
+    { key: "mean_cumulative_regret", title: "累積リグレット", hint: "低いほど良い" },
+    { key: "mean_final_ctr", title: "最終CTR", hint: "高いほど良い" }
+  ];
 
-  // Metric explanation + formula (rendered with MathJax).
-  const info = METRIC_INFO[metric];
-  if (info) {
-    document.getElementById("metric-desc").textContent = info.desc;
-    renderFormula(document.getElementById("metric-formula"), info);
+  // Column headers: title + one-line description + formula (MathJax).
+  const heads = { mean_cumulative_regret: "head-regret", mean_final_ctr: "head-ctr" };
+  for (const m of METRICS) {
+    const info = METRIC_INFO[m.key];
+    const head = document.getElementById(heads[m.key]);
+    head.innerHTML = `
+      <div class="mh-title">${esc(m.title)} <span style="color:var(--muted);font-weight:400;font-size:12px">(${esc(m.hint)})</span></div>
+      <div class="mh-desc">${esc(info.desc)}</div>
+      <div class="mh-formula"></div>`;
+    const bare = info.tex.replace(/^\\\(\s*/, "").replace(/\s*\\\)$/, "");
+    renderMath(head.querySelector(".mh-formula"), bare, info.plain, false);
   }
 
-  const charts = document.getElementById("charts");
-  charts.innerHTML = "";
-
-  for (const [envName, algs] of Object.entries(DATA.environments)) {
-    const entries = Object.entries(algs).map(([name, m]) => ({ name, val: m[metric] }));
+  // Build one bar-chart pane for a given metric within an environment.
+  function buildPane(algs, metricKey, label) {
+    const higher = HIGHER_BETTER.has(metricKey);
+    const entries = Object.entries(algs).map(([name, m]) => ({ name, val: m[metricKey] }));
     const max = Math.max(...entries.map(e => e.val));
-    const bestVal = higher ? Math.max(...entries.map(e => e.val)) : Math.min(...entries.map(e => e.val));
+    const bestVal = higher ? max : Math.min(...entries.map(e => e.val));
     entries.sort((a, b) => higher ? b.val - a.val : a.val - b.val);
 
-    const block = document.createElement("div");
-    block.className = "env-block";
-    block.innerHTML = `
-      <div class="env-head">
-        <span class="env-name">${esc(envName)}</span>
-        <span class="env-tag">${esc(ENV_TAG[envName] || "")}</span>
-      </div>
-      <div class="rows"></div>`;
-    const rows = block.querySelector(".rows");
-
+    const pane = document.createElement("div");
+    pane.innerHTML = `<div class="pane-label">${esc(label)}</div><div class="rows"></div>`;
+    const rows = pane.querySelector(".rows");
     for (const e of entries) {
       const isBest = e.val === bestVal;
       const pct = max > 0 ? (e.val / max) * 100 : 0;
@@ -392,14 +397,30 @@ function renderResults() {
       row.innerHTML = `
         <div class="alg">${isBest ? "★ " : ""}${esc(e.name)}</div>
         <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:hsl(${hue},70%,55%)"></div></div>
-        <div class="val">${fmt(e.val, metric)}</div>`;
+        <div class="val">${fmt(e.val, metricKey)}</div>`;
       rows.appendChild(row);
     }
+    return pane;
+  }
+
+  const charts = document.getElementById("charts");
+  charts.innerHTML = "";
+  for (const [envName, algs] of Object.entries(DATA.environments)) {
+    const block = document.createElement("div");
+    block.className = "env-block";
+    block.innerHTML = `
+      <div class="env-head">
+        <span class="env-name">${esc(envName)}</span>
+        <span class="env-tag">${esc(ENV_TAG[envName] || "")}</span>
+      </div>
+      <div class="panes"></div>`;
+    const panes = block.querySelector(".panes");
+    panes.appendChild(buildPane(algs, "mean_cumulative_regret", "累積リグレット (低いほど良い)"));
+    panes.appendChild(buildPane(algs, "mean_final_ctr", "最終CTR (高いほど良い)"));
     charts.appendChild(block);
   }
-  document.getElementById("legend").textContent = higher
-    ? "★ = 各環境で最良（最終CTRが最大）。バーが長い/緑ほど良い。"
-    : "★ = 各環境で最良（累積リグレットが最小）。バーが短い/緑ほど良い。";
+  document.getElementById("legend").textContent =
+    "★ = その指標で各環境の最良。リグレットはバーが短い/緑ほど良い、CTRはバーが長い/緑ほど良い。";
 }
 
 // ---- Benchmarks tab ----
@@ -451,7 +472,6 @@ document.getElementById("config").innerHTML =
   `<span>環境数: <b>${Object.keys(DATA.environments).length}</b></span>` +
   `<span>アルゴリズム数: <b>${ALGORITHMS.length}</b></span>`;
 
-document.getElementById("metric").addEventListener("change", renderResults);
 renderResults();
 renderBenchmarks();
 renderAlgorithms();
