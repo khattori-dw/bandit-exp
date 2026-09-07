@@ -4,6 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>bandit-exp</title>
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["$$", "$$"]] },
+    svg: { fontCache: "global" }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mjx-chtml.js" id="MathJax-script" async></script>
 <style>
   :root {
     --bg: #0f1220;
@@ -50,8 +57,18 @@
   .panel-view.active { display: block; }
 
   /* Results */
-  .controls { margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
+  .controls { margin-bottom: 12px; display: flex; align-items: center; gap: 12px; }
   .controls label { font-size: 13px; color: var(--muted); }
+  .metric-info {
+    background: var(--panel); border: 1px solid var(--grid); border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0; padding: 12px 16px; margin-bottom: 22px; max-width: 780px;
+  }
+  .metric-desc { font-size: 13.5px; color: var(--text); }
+  .metric-formula { margin-top: 6px; font-size: 15px; color: var(--muted); overflow-x: auto; }
+  /* Hide the formula until it is typeset (MathJax) or a plain fallback is
+     substituted, so raw "\( ... \)" LaTeX never flashes on screen. */
+  .metric-formula:not(.ready) { visibility: hidden; }
+  .metric-formula.plain { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   select {
     background: var(--panel2); color: var(--text); border: 1px solid var(--grid);
     border-radius: 8px; padding: 7px 10px; font-size: 14px;
@@ -121,6 +138,10 @@
         <option value="mean_cumulative_regret">累積リグレット (低いほど良い)</option>
         <option value="mean_final_ctr">最終CTR (高いほど良い)</option>
       </select>
+    </div>
+    <div class="metric-info" id="metric-info">
+      <div class="metric-desc" id="metric-desc"></div>
+      <div class="metric-formula" id="metric-formula"></div>
     </div>
     <div id="charts"></div>
     <div class="legend" id="legend"></div>
@@ -281,6 +302,52 @@ const ALGORITHMS = [
 
 const ENV_TAG = Object.fromEntries(ENVIRONMENTS.map(e => [e.key, e.tag]));
 const HIGHER_BETTER = new Set(["mean_final_ctr"]);
+
+// ---- Per-metric one-line description + one-line LaTeX formula ----
+const METRIC_INFO = {
+  mean_cumulative_regret: {
+    desc: "各時刻で「最適な腕を引いていたら得られた期待報酬」と「実際に選んだ腕の期待報酬」の差を全時刻にわたって足し上げた量。小さいほど、無駄な探索が少なく素早く最適腕に集中できたことを意味する（試行ごとの平均）。",
+    // R(T) = sum over t of ( optimal mean - chosen-arm mean )
+    tex: "\\( \\displaystyle R(T)=\\sum_{t=1}^{T}\\bigl(\\mu^{*}(t)-\\mu_{a_t}(t)\\bigr) \\)",
+    plain: "R(T) = \u03a3_{t=1..T} ( \u03bc*(t) \u2212 \u03bc_{a_t}(t) )"
+  },
+  mean_final_ctr: {
+    desc: "実行終了時点での全体クリック率、すなわち総クリック数 ÷ 総表示回数。高いほど、期間全体を通じて良い腕を多く引けたことを意味する（試行ごとの平均）。",
+    // CTR = total clicks / total displays
+    tex: "\\( \\displaystyle \\mathrm{CTR}=\\frac{\\sum_i c_i}{\\sum_i n_i} \\)",
+    plain: "CTR = ( \u03a3_i c_i ) / ( \u03a3_i n_i )"
+  }
+};
+
+// Render the formula: prefer MathJax; if it hasn't loaded within a short
+// window (e.g. CDN blocked/offline), fall back to a readable plain-text form.
+// Either way the element is only revealed once it holds nice output, so raw
+// LaTeX source never flashes on screen.
+function renderFormula(el, info) {
+  el.classList.remove("ready", "plain");
+
+  function showPlain() {
+    el.classList.add("plain", "ready");
+    el.textContent = info.plain;
+  }
+
+  function tryMathJax(attemptsLeft) {
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      el.classList.remove("plain");
+      el.textContent = info.tex;
+      window.MathJax.typesetClear && window.MathJax.typesetClear([el]);
+      window.MathJax.typesetPromise([el])
+        .then(() => el.classList.add("ready"))
+        .catch(showPlain);
+    } else if (attemptsLeft > 0) {
+      setTimeout(() => tryMathJax(attemptsLeft - 1), 200);
+    } else {
+      showPlain(); // MathJax never arrived — degrade gracefully.
+    }
+  }
+
+  tryMathJax(15); // up to ~3s
+}
 function fmt(v, metric) { return metric === "mean_final_ctr" ? v.toFixed(4) : v.toFixed(2); }
 function esc(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
@@ -288,6 +355,14 @@ function esc(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": 
 function renderResults() {
   const metric = document.getElementById("metric").value;
   const higher = HIGHER_BETTER.has(metric);
+
+  // Metric explanation + formula (rendered with MathJax).
+  const info = METRIC_INFO[metric];
+  if (info) {
+    document.getElementById("metric-desc").textContent = info.desc;
+    renderFormula(document.getElementById("metric-formula"), info);
+  }
+
   const charts = document.getElementById("charts");
   charts.innerHTML = "";
 
