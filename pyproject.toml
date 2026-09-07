@@ -1,0 +1,20 @@
+[project]
+name = "bandit-exp"
+version = "0.1.0"
+description = "A benchmark harness for fairly comparing multi-armed bandit algorithms"
+readme = "README.md"
+requires-python = ">=3.13"
+# No runtime dependencies: the benchmark harness uses only the standard library.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/khattori-dw/bandit-exp"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = ["test_*.py"]

@@ -1,4 +1,7 @@
-PORT := 8080
+.PHONY: run test
 
 run:
-	streamlit run main.py --server.port $(PORT) --server.headless true
+	uv run python main.py
+
+test:
+	uv run pytest -q
