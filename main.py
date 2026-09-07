@@ -1,229 +1,190 @@
-import math
+"""Benchmark runner for bandit-exp.
+
+Evaluates *every* algorithm against *every* benchmark environment and
+writes the results to a JSON file. There is no UI: this is a pure,
+reproducible batch job.
+
+Fairness
+--------
+For each (environment, algorithm) pair and each trial we seed both the
+environment and the algorithm deterministically from a base seed. Every
+algorithm therefore faces the *same* sequence of reward realisations on a
+given trial, so differences in outcome reflect the algorithm, not luck.
+
+Metrics
+-------
+- ``final_ctr``       : overall click-through rate at the end of the run.
+- ``cumulative_regret``: sum over time of (optimal mean - chosen arm mean),
+  the standard way to score a bandit. Lower is better.
+"""
+
+from __future__ import annotations
+
+import json
 import random
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
 
-import numpy.random
-import streamlit
-
-streamlit.title("Bandit-exp")
-streamlit.markdown(
-    "[khattori-dw/bandit-exp](https://github.com/khattori-dw/bandit-exp)"
+from algorithms import (
+    BanditAlgorithm,
+    EGreedy,
+    Random,
+    ThomsonSampling,
+    UCB1,
+    UCB1Tuned,
+)
+from environments import (
+    AbruptChangeBernoulli,
+    DriftingBernoulli,
+    Environment,
+    GapBernoulli,
+    StationaryBernoulli,
 )
 
-
-class Arms:
-    def __init__(self, ps: list[float]):
-        self.ps = ps
-        self.num = len(ps)
-
-    def choose(self, i) -> bool:
-        """Returns True if clicked"""
-        assert 0 <= i < self.num
-        p = self.ps[i]
-        return random.random() < p
+RESULTS_DIR = Path(__file__).parent / "results"
 
 
-class BanditAlgorithm:
-
-    num: int
-    displayed: list[int]
-    clicked: list[int]
-    ctr: list[float]
-
-    def __init__(self, num: int):
-        self.num = num
-        self.displayed = [0] * num
-        self.clicked = [0] * num
-        self.ctr = [0.0] * num
-
-    def choose(self) -> int:
-        raise NotImplementedError
-
-    def display(self) -> int:
-        """Choice an arm, and display it"""
-        i = self.choose()
-        self.displayed[i] += 1
-        self.ctr[i] = self.clicked[i] / self.displayed[i]
-        return i
-
-    def reward(self, i: int, clicked: bool) -> None:
-        """Given reward for arm #i"""
-        if clicked:
-            self.clicked[i] += 1
-            self.ctr[i] = self.clicked[i] / self.displayed[i]
-
-    def ctr_overall(self) -> float:
-        sum_displayed = sum(self.displayed)
-        sum_clicked = sum(self.clicked)
-        if sum_displayed == 0:
-            return 0.0
-        return sum_clicked / sum_displayed
+@dataclass(frozen=True)
+class EnvSpec:
+    name: str
+    build: Callable[[random.Random], Environment]
 
 
-class EGreedy(BanditAlgorithm):
-    def __init__(self, num: int, epsilon: float):
-        super().__init__(num)
-        self.epsilon = epsilon
-
-    def choose(self) -> int:
-        """Choice an arm (not displayed, not clicked)"""
-        if self.epsilon < random.random():  # Explore
-            return random.randrange(self.num)
-        else:  # Exploit
-            maxctr = max(self.ctr)
-            maxarms = [i for i in range(self.num) if self.ctr[i] >= maxctr]
-            return random.choice(maxarms)
+@dataclass(frozen=True)
+class AlgSpec:
+    name: str
+    build: Callable[[int, random.Random], BanditAlgorithm]
 
 
-class Random(BanditAlgorithm):
-    def __init__(self, num: int):
-        super().__init__(num)
-
-    def choose(self) -> int:
-        return random.randrange(self.num)
-
-
-class ThomsonSampling(BanditAlgorithm):
-    def __init__(self, num: int, alpha: float, beta: float):
-        assert alpha > 0
-        assert beta > 0
-        super().__init__(num)
-        self.alpha = alpha
-        self.beta = beta
-
-    def choose(self) -> int:
-        max_theta = 0.0
-        max_arm_index = 0
-        for i in range(self.num):
-            theta = numpy.random.beta(
-                self.alpha + self.clicked[i],
-                self.beta + self.displayed[i] - self.clicked[i],
-            )
-            if theta > max_theta:
-                max_theta = theta
-                max_arm_index = i
-        return max_arm_index
-
-
-class UCB1(BanditAlgorithm):
-    def __init__(self, num: int):
-        super().__init__(num)
-
-    def choose(self) -> int:
-        max_theta = 0.0
-        max_arm_index = 0
-        n = sum(self.displayed)
-        for i in range(self.num):
-            if self.displayed[i] == 0:
-                return i
-        for i in range(self.num):
-            theta = self.clicked[i] / self.displayed[i] + math.sqrt(
-                2.0 * math.log(n) / self.displayed[i]
-            )
-            if theta > max_theta:
-                max_theta = theta
-                max_arm_index = i
-        return max_arm_index
+def make_env_specs() -> list[EnvSpec]:
+    """The suite of benchmark problem settings."""
+    return [
+        EnvSpec(
+            "stationary_easy",
+            lambda rng: StationaryBernoulli([0.1, 0.2, 0.5], rng=rng),
+        ),
+        EnvSpec(
+            "gap_hard",
+            lambda rng: GapBernoulli(num=10, best=0.5, gap=0.02, rng=rng),
+        ),
+        EnvSpec(
+            "gap_easy",
+            lambda rng: GapBernoulli(num=10, best=0.5, gap=0.25, rng=rng),
+        ),
+        EnvSpec(
+            "drifting",
+            lambda rng: DriftingBernoulli(
+                start=[0.1, 0.4, 0.7],
+                end=[0.7, 0.4, 0.1],
+                horizon=2000,
+                rng=rng,
+            ),
+        ),
+        EnvSpec(
+            "abrupt_change",
+            lambda rng: AbruptChangeBernoulli(
+                before=[0.1, 0.2, 0.6],
+                after=[0.6, 0.2, 0.1],
+                change_at=1000,
+                rng=rng,
+            ),
+        ),
+    ]
 
 
-class UCB1Tuned(BanditAlgorithm):
-    def __init__(self, num: int):
-        super().__init__(num)
-
-    def choose(self) -> int:
-        max_theta = 0.0
-        max_arm_index = 0
-        n = sum(self.displayed)
-        for i in range(self.num):
-            if self.displayed[i] == 0:
-                return i
-        for i in range(self.num):
-            variance = self.clicked[i] * (self.displayed[i] - self.clicked[i]) / (
-                max(1, self.displayed[i]) ** 2
-            ) + math.sqrt(2.0 * math.log(n) / self.displayed[i])
-            theta = self.clicked[i] / self.displayed[i] + min(
-                math.sqrt(math.log(n) / self.displayed[i]), variance
-            )
-            if theta > max_theta:
-                max_theta = theta
-                max_arm_index = i
-        return max_arm_index
+def make_alg_specs() -> list[AlgSpec]:
+    """Every algorithm to be compared."""
+    return [
+        AlgSpec("Random", lambda n, rng: Random(n, rng=rng)),
+        AlgSpec("EGreedy(0.01)", lambda n, rng: EGreedy(n, 0.01, rng=rng)),
+        AlgSpec("EGreedy(0.1)", lambda n, rng: EGreedy(n, 0.1, rng=rng)),
+        AlgSpec("ThomsonSampling", lambda n, rng: ThomsonSampling(n, rng=rng)),
+        AlgSpec("UCB1", lambda n, rng: UCB1(n, rng=rng)),
+        AlgSpec("UCB1Tuned", lambda n, rng: UCB1Tuned(n, rng=rng)),
+    ]
 
 
-streamlit.subheader("Arms")
-num_arms = int(streamlit.number_input("#arms", min_value=3, max_value=100))
-ps = []
-for i in range(num_arms):
-    p = (
-        streamlit.number_input(
-            f"CTR(%) for arm#{i}", value=3.0, min_value=0.0, max_value=100.0, step=0.5
+def run_trial(
+    env: Environment, alg: BanditAlgorithm, horizon: int
+) -> tuple[float, float]:
+    """Run one algorithm on one environment for ``horizon`` steps.
+
+    Returns ``(final_ctr, cumulative_regret)``.
+    """
+    cumulative_regret = 0.0
+    for t in range(horizon):
+        i = alg.display()
+        clicked = bool(env.pull(i, t))
+        alg.reward(i, clicked)
+        cumulative_regret += env.optimal_mean(t) - env.mean(i, t)
+    return alg.ctr_overall(), cumulative_regret
+
+
+def benchmark(
+    horizon: int = 2000, num_trials: int = 20, base_seed: int = 12345
+) -> dict:
+    env_specs = make_env_specs()
+    alg_specs = make_alg_specs()
+
+    results: dict = {
+        "config": {
+            "horizon": horizon,
+            "num_trials": num_trials,
+            "base_seed": base_seed,
+        },
+        "environments": {},
+    }
+
+    for env_spec in env_specs:
+        env_result: dict = {}
+        for alg_spec in alg_specs:
+            final_ctrs: list[float] = []
+            regrets: list[float] = []
+            for trial in range(num_trials):
+                # Same seed for env and alg on a given (env, alg, trial),
+                # derived deterministically so runs are reproducible and
+                # every algorithm sees a comparable reward stream.
+                seed = base_seed + trial
+                env = env_spec.build(random.Random(seed))
+                alg = alg_spec.build(env.num, random.Random(seed + 1))
+                ctr, regret = run_trial(env, alg, horizon)
+                final_ctrs.append(ctr)
+                regrets.append(regret)
+            env_result[alg_spec.name] = {
+                "mean_final_ctr": sum(final_ctrs) / num_trials,
+                "mean_cumulative_regret": sum(regrets) / num_trials,
+            }
+        results["environments"][env_spec.name] = env_result
+
+    return results
+
+
+def main() -> None:
+    started = time.time()
+    results = benchmark()
+    results["config"]["elapsed_seconds"] = round(time.time() - started, 3)
+
+    RESULTS_DIR.mkdir(exist_ok=True)
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    out_path = RESULTS_DIR / f"benchmark-{timestamp}.json"
+    out_path.write_text(json.dumps(results, indent=2, ensure_ascii=False))
+
+    print(f"Wrote results to {out_path}")
+    # Also print a compact regret leaderboard per environment.
+    for env_name, env_result in results["environments"].items():
+        print(f"\n[{env_name}] mean cumulative regret (lower is better):")
+        ranked = sorted(
+            env_result.items(), key=lambda kv: kv[1]["mean_cumulative_regret"]
         )
-        / 100.0
-    )
-    ps.append(p)
-arms = Arms(ps)
+        for alg_name, metrics in ranked:
+            print(
+                f"  {alg_name:20s} "
+                f"regret={metrics['mean_cumulative_regret']:9.2f}  "
+                f"ctr={metrics['mean_final_ctr']:.4f}"
+            )
 
 
-streamlit.subheader("Algorithms")
-num_algs = int(streamlit.number_input("#algorithms", min_value=1, max_value=100))
-algs: list[BanditAlgorithm] = []
-for i in range(num_algs):
-    streamlit.markdown(f"**Algorithm#{i}**")
-    algname = streamlit.selectbox(
-        "algorithm",
-        ["EGreedy", "Random", "ThomsonSampling", "UCB1", "UCB1Tuned"],
-        key=f"algname{i}",
-    )
-
-    if algname == "EGreedy":
-        epsilon = streamlit.number_input(
-            "epsilon",
-            value=0.01,
-            min_value=0.0,
-            max_value=1.0,
-            step=0.01,
-            key=f"EGreedy{i}",
-        )
-        algs.append(EGreedy(num_arms, epsilon))
-
-    elif algname == "Random":
-        algs.append(Random(num_arms))
-
-    elif algname == "ThomsonSampling":
-        alpha = streamlit.number_input("alpha", value=1.0, min_value=0.1, step=0.1)
-        beta = streamlit.number_input("beta", value=1.0, min_value=0.1, step=0.1)
-        algs.append(ThomsonSampling(num_arms, alpha, beta))
-
-    elif algname == "UCB1":
-        algs.append(UCB1(num_arms))
-
-    elif algname == "UCB1Tuned":
-        algs.append(UCB1Tuned(num_arms))
-
-
-streamlit.subheader("Run Algorithms")
-maxtime = int(streamlit.number_input("#maxtime", value=1000, min_value=1, step=1))
-num_tries = int(
-    streamlit.number_input("#tries for each algorithms", value=3, min_value=1, step=1)
-)
-if streamlit.button("Run"):
-    table = []
-    names = []
-    for alg_index, alg in enumerate(algs):
-        tries = []
-        for _ in range(num_tries):
-            ctrs = []
-            for t in range(maxtime):
-                i = alg.display()
-                clicked = arms.choose(i)
-                alg.reward(i, clicked)
-                ctrs.append(alg.ctr_overall())
-            tries.append(ctrs)
-        ctrs = [
-            sum(tries[j][t] for j in range(num_tries)) / num_tries * 100.0
-            for t in range(maxtime)
-        ]
-        table.append(ctrs)
-        names.append(f"Alg#{alg_index} ({alg.__class__.__name__})")
-
-    streamlit.markdown("#### cumulative CTR(%)")
-    streamlit.line_chart({name: ctrs for name, ctrs in zip(names, table)})
+if __name__ == "__main__":
+    main()
