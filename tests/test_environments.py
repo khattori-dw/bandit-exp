@@ -14,7 +14,7 @@ import random
 
 import pytest
 
-from environments import (
+from bandit_exp.environments import (
     AbruptChangeBernoulli,
     DriftingBernoulli,
     Environment,

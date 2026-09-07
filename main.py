@@ -22,12 +22,17 @@ from __future__ import annotations
 
 import json
 import random
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from algorithms import (
+# Allow running as a plain script (``python main.py``) without installing
+# the package: make ``src/`` importable.
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from bandit_exp.algorithms import (
     BanditAlgorithm,
     EGreedy,
     Random,
@@ -35,7 +40,7 @@ from algorithms import (
     UCB1,
     UCB1Tuned,
 )
-from environments import (
+from bandit_exp.environments import (
     AbruptChangeBernoulli,
     DriftingBernoulli,
     Environment,

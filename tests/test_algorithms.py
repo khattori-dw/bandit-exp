@@ -12,7 +12,7 @@ import random
 
 import pytest
 
-from algorithms import (
+from bandit_exp.algorithms import (
     BanditAlgorithm,
     EGreedy,
     Random,
@@ -20,7 +20,7 @@ from algorithms import (
     UCB1,
     UCB1Tuned,
 )
-from environments import GapBernoulli, StationaryBernoulli
+from bandit_exp.environments import GapBernoulli, StationaryBernoulli
 
 
 def make_all(num: int, rng: random.Random | None = None) -> list[BanditAlgorithm]:
