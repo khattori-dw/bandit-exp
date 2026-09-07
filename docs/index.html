@@ -412,6 +412,11 @@ function renderResults() {
     const entries = Object.entries(algs).map(([name, m]) => ({ name, val: m[metricKey] }));
     const max = Math.max(...entries.map(e => e.val));
     const bestVal = higher ? max : Math.min(...entries.map(e => e.val));
+    // Absolute color anchor: how much an algorithm improves over the Random
+    // (no-learning) baseline in this environment. If nothing meaningfully
+    // beats Random — e.g. gap_hard, where the arms are almost indistinguishable
+    // — everyone stays red, rather than the in-env best being tinted green.
+    const randomVal = (algs["Random"] || {})[metricKey];
     entries.sort((a, b) => higher ? b.val - a.val : a.val - b.val);
 
     const pane = document.createElement("div");
@@ -420,7 +425,17 @@ function renderResults() {
     for (const e of entries) {
       const isBest = e.val === bestVal;
       const pct = max > 0 ? (e.val / max) * 100 : 0;
-      const goodness = higher ? e.val / max : 1 - (e.val / max);
+      // Fractional improvement over the Random baseline, clamped to [0, 1].
+      //   regret (lower better): (random - val) / random
+      //   CTR    (higher better): (val - random) / random
+      // 0 -> red (no better than Random), 1 -> green (a large improvement).
+      let goodness = 0;
+      if (randomVal && randomVal > 0) {
+        goodness = higher
+          ? (e.val - randomVal) / randomVal
+          : (randomVal - e.val) / randomVal;
+      }
+      goodness = Math.max(0, Math.min(1, goodness));
       const hue = goodness * 130;
       const row = document.createElement("div");
       row.className = "row" + (isBest ? " best" : "");
@@ -495,12 +510,19 @@ document.getElementById("tabs").addEventListener("click", ev => {
 
 // ---- Init ----
 const c = DATA.config;
+// Count the algorithms actually evaluated (from the results data), not the
+// number of description cards: EGreedy is one card but runs at two epsilons,
+// so the benchmarked count (6) differs from ALGORITHMS.length (5).
+const numAlgorithms = Math.max(
+  0,
+  ...Object.values(DATA.environments).map(algs => Object.keys(algs).length)
+);
 document.getElementById("config").innerHTML =
   `<span>horizon: <b>${c.horizon}</b></span>` +
   `<span>trials/組: <b>${c.num_trials}</b></span>` +
   `<span>base seed: <b>${c.base_seed}</b></span>` +
   `<span>環境数: <b>${Object.keys(DATA.environments).length}</b></span>` +
-  `<span>アルゴリズム数: <b>${ALGORITHMS.length}</b></span>`;
+  `<span>アルゴリズム数: <b>${numAlgorithms}</b></span>`;
 
 renderResults();
 renderBenchmarks();
