@@ -13,6 +13,7 @@ from bandit_exp.environments import (
     DriftingBernoulli,
     Environment,
     GapBernoulli,
+    SinusoidalNoiseBernoulli,
     StationaryBernoulli,
 )
 
@@ -30,4 +31,5 @@ __all__ = [
     "GapBernoulli",
     "DriftingBernoulli",
     "AbruptChangeBernoulli",
+    "SinusoidalNoiseBernoulli",
 ]

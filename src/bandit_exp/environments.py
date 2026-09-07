@@ -22,6 +22,7 @@ Design notes
 from __future__ import annotations
 
 import abc
+import math
 import random
 
 
@@ -178,3 +179,43 @@ class AbruptChangeBernoulli(Environment):
 
     def mean(self, i: int, t: int) -> float:
         return self.after[i] if t >= self.change_at else self.before[i]
+
+
+class SinusoidalNoiseBernoulli(Environment):
+    """Non-stationary: each arm oscillates around a fixed base probability.
+
+    At time ``t`` arm ``i`` has probability
+
+        clip(base[i] + amplitude[i] * sin(theta[i] * t), 0, 1)
+
+    i.e. a deterministic (not random) periodic perturbation on top of a
+    stationary base. With a small amplitude this models mild, structured
+    fluctuation over time (e.g. daily/periodic effects on a page's CTR)
+    while keeping the arms close together.
+    """
+
+    def __init__(
+        self,
+        base: list[float],
+        amplitude: list[float] | float,
+        theta: list[float],
+        rng: random.Random | None = None,
+    ):
+        super().__init__(len(base), rng)
+        if isinstance(amplitude, (int, float)):
+            amplitude = [float(amplitude)] * len(base)
+        if not (len(base) == len(amplitude) == len(theta)):
+            raise ValueError("base, amplitude and theta must have the same length")
+        for b in base:
+            if not 0.0 <= b <= 1.0:
+                raise ValueError("every base probability must be in [0, 1]")
+        for a in amplitude:
+            if a < 0.0:
+                raise ValueError("amplitude must be >= 0")
+        self.base = list(base)
+        self.amplitude = list(amplitude)
+        self.theta = list(theta)
+
+    def mean(self, i: int, t: int) -> float:
+        p = self.base[i] + self.amplitude[i] * math.sin(self.theta[i] * t)
+        return min(max(p, 0.0), 1.0)
