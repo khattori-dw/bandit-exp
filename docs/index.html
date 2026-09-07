@@ -175,14 +175,14 @@
 
 <footer>
   Source: <a href="https://github.com/khattori-dw/bandit-exp">khattori-dw/bandit-exp</a> ·
-  Data snapshot: <code>benchmark-20260907-084911.json</code>
+  Data snapshot: <code>benchmark-20260907-094605.json</code>
   (horizon=2000, 20 trials/pair) · 自己完結・外部依存なし。
 </footer>
 
 <script>
-// ---- Embedded benchmark data (from results/benchmark-20260907-084911.json) ----
+// ---- Embedded benchmark data (from results/benchmark-20260907-094605.json) ----
 const DATA = {
-  "config": { "horizon": 2000, "num_trials": 20, "base_seed": 12345, "elapsed_seconds": 4.53 },
+  "config": { "horizon": 2000, "num_trials": 20, "base_seed": 12345, "elapsed_seconds": 6.00 },
   "environments": {
     "stationary_easy": {
       "Random": { "mean_final_ctr": 0.2684, "mean_cumulative_regret": 465.48 },
@@ -223,6 +223,22 @@ const DATA = {
       "ThomsonSampling": { "mean_final_ctr": 0.4553, "mean_cumulative_regret": 292.935 },
       "UCB1": { "mean_final_ctr": 0.568425, "mean_cumulative_regret": 70.215 },
       "UCB1Tuned": { "mean_final_ctr": 0.562125, "mean_cumulative_regret": 82.33 }
+    },
+    "video_top_stationary": {
+      "Random": { "mean_final_ctr": 0.117750, "mean_cumulative_regret": 6.018 },
+      "EGreedy(0.01)": { "mean_final_ctr": 0.118350, "mean_cumulative_regret": 5.359 },
+      "EGreedy(0.1)": { "mean_final_ctr": 0.117750, "mean_cumulative_regret": 5.637 },
+      "ThomsonSampling": { "mean_final_ctr": 0.118050, "mean_cumulative_regret": 5.330 },
+      "UCB1": { "mean_final_ctr": 0.117675, "mean_cumulative_regret": 5.913 },
+      "UCB1Tuned": { "mean_final_ctr": 0.118300, "mean_cumulative_regret": 5.305 }
+    },
+    "video_top_noisy": {
+      "Random": { "mean_final_ctr": 0.118275, "mean_cumulative_regret": 15.537 },
+      "EGreedy(0.01)": { "mean_final_ctr": 0.118050, "mean_cumulative_regret": 15.380 },
+      "EGreedy(0.1)": { "mean_final_ctr": 0.117875, "mean_cumulative_regret": 15.087 },
+      "ThomsonSampling": { "mean_final_ctr": 0.118600, "mean_cumulative_regret": 13.919 },
+      "UCB1": { "mean_final_ctr": 0.118175, "mean_cumulative_regret": 14.838 },
+      "UCB1Tuned": { "mean_final_ctr": 0.118150, "mean_cumulative_regret": 15.404 }
     }
   }
 };
@@ -263,6 +279,20 @@ const ENVIRONMENTS = [
     arms: "before = [0.1, 0.2, 0.6]、after = [0.6, 0.2, 0.1]、change_at = 1000",
     desc: "t=1000 で確率が突然入れ替わる非定常環境（レジームチェンジ）。前半の最適腕 arm#2 が後半は最悪腕になる。急変にどれだけ速く反応して乗り換えられるかが決定的。",
     optimal: "t<1000: arm#2 = 0.60 / t≥1000: arm#0 = 0.60"
+  },
+  {
+    key: "video_top_stationary", title: "video_top_stationary",
+    cls: "StationaryBernoulli", tag: "定常 / 4本 / 実データ",
+    arms: "CTR = [11.15%, 11.61%, 11.95%, 11.97%]（固定）",
+    desc: "とある動画サイトのトップページの実際のCTR。4本が 11〜12% の僅差で並ぶ、非常に区別が難しい現実的な設定。最適腕 arm#3 と2位 arm#2 の差はわずか 0.02% しかない。",
+    optimal: "arm#3 = 11.97%（時間によらず一定）"
+  },
+  {
+    key: "video_top_noisy", title: "video_top_noisy",
+    cls: "SinusoidalNoiseBernoulli", tag: "非定常 / 4本 / sin波ノイズ",
+    arms: "p_i(t) = base_i + 0.009·sin(θ_i·t)、base = [11.15%, 11.61%, 11.95%, 11.97%]、θ = [0.011, 0.017, 0.023, 0.031]",
+    desc: "video_top_stationary と同じ実CTRに、振幅 0.9%（<1%）の決定的な正弦波ノイズを加えた非定常版。ランダムではなく sin 波なので周期的に揺れる。僅差の腕がゆっくり入れ替わり続けるため、定常前提のアルゴリズムには厄介。θ_i は各腕で位相がずれるよう別々に設定。",
+    optimal: "時間とともに緩やかに変動（多くの時刻で arm#3 付近）"
   }
 ];
 

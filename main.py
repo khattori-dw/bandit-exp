@@ -45,6 +45,7 @@ from bandit_exp.environments import (
     DriftingBernoulli,
     Environment,
     GapBernoulli,
+    SinusoidalNoiseBernoulli,
     StationaryBernoulli,
 )
 
@@ -93,6 +94,25 @@ def make_env_specs() -> list[EnvSpec]:
                 before=[0.1, 0.2, 0.6],
                 after=[0.6, 0.2, 0.1],
                 change_at=1000,
+                rng=rng,
+            ),
+        ),
+        # Real CTRs of a video site's top page: four very close arms.
+        EnvSpec(
+            "video_top_stationary",
+            lambda rng: StationaryBernoulli(
+                [0.1115, 0.1161, 0.1195, 0.1197], rng=rng
+            ),
+        ),
+        # Same base CTRs, plus a small deterministic sinusoidal wobble
+        # (< 1%, so arms stay close). theta_i are arbitrary constants,
+        # chosen distinct so the arms do not oscillate in phase.
+        EnvSpec(
+            "video_top_noisy",
+            lambda rng: SinusoidalNoiseBernoulli(
+                base=[0.1115, 0.1161, 0.1195, 0.1197],
+                amplitude=0.009,  # 0.9% peak wobble (< 1%)
+                theta=[0.011, 0.017, 0.023, 0.031],
                 rng=rng,
             ),
         ),

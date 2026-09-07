@@ -19,6 +19,7 @@ from bandit_exp.environments import (
     DriftingBernoulli,
     Environment,
     GapBernoulli,
+    SinusoidalNoiseBernoulli,
     StationaryBernoulli,
 )
 
@@ -33,6 +34,9 @@ def make_all(rng: random.Random | None = None) -> list[Environment]:
         ),
         AbruptChangeBernoulli(
             before=[0.2, 0.8], after=[0.8, 0.2], change_at=50, rng=rng
+        ),
+        SinusoidalNoiseBernoulli(
+            base=[0.3, 0.5], amplitude=0.05, theta=[0.01, 0.02], rng=rng
         ),
     ]
 
@@ -139,6 +143,49 @@ def test_abrupt_change_switches_at_change_point():
     assert env.optimal_arm(50) == 0
 
 
+def test_sinusoidal_oscillates_around_base():
+    import math
+
+    base = [0.3, 0.5]
+    amp = 0.05
+    theta = [0.01, 0.02]
+    env = SinusoidalNoiseBernoulli(base=base, amplitude=amp, theta=theta)
+    # At t=0, sin(0)=0, so mean equals the base.
+    assert env.mean(0, 0) == pytest.approx(0.3)
+    assert env.mean(1, 0) == pytest.approx(0.5)
+    # At a later time, mean = base + amp*sin(theta*t), and stays within +/-amp.
+    for t in (1, 7, 50, 123, 999):
+        for i in range(2):
+            expected = base[i] + amp * math.sin(theta[i] * t)
+            assert env.mean(i, t) == pytest.approx(expected)
+            assert base[i] - amp - 1e-9 <= env.mean(i, t) <= base[i] + amp + 1e-9
+
+
+def test_sinusoidal_clips_to_unit_interval():
+    # Large amplitude would push below 0 / above 1; result must be clipped.
+    env = SinusoidalNoiseBernoulli(base=[0.02, 0.99], amplitude=0.5, theta=[1.0, 1.0])
+    for t in range(200):
+        for i in range(2):
+            assert 0.0 <= env.mean(i, t) <= 1.0
+
+
+def test_sinusoidal_scalar_amplitude_broadcasts():
+    env = SinusoidalNoiseBernoulli(base=[0.3, 0.4, 0.5], amplitude=0.01, theta=[0.1, 0.2, 0.3])
+    assert env.amplitude == [0.01, 0.01, 0.01]
+
+
+def test_sinusoidal_video_top_arms_stay_close():
+    # The video_top_noisy configuration: four near-tied arms, small wobble.
+    env = SinusoidalNoiseBernoulli(
+        base=[0.1115, 0.1161, 0.1195, 0.1197],
+        amplitude=0.009,
+        theta=[0.011, 0.017, 0.023, 0.031],
+    )
+    for t in range(0, 2000, 50):
+        means = [env.mean(i, t) for i in range(env.num)]
+        assert max(means) - min(means) < 0.05  # arms remain a close race
+
+
 # --------------------------------------------------------------------------
 # Validation tests
 # --------------------------------------------------------------------------
@@ -159,6 +206,13 @@ def test_gap_rejects_negative_resulting_probability():
 def test_drifting_rejects_mismatched_lengths():
     with pytest.raises(ValueError):
         DriftingBernoulli(start=[0.1, 0.2], end=[0.3], horizon=10)
+
+
+def test_sinusoidal_rejects_mismatched_lengths():
+    with pytest.raises(ValueError):
+        SinusoidalNoiseBernoulli(base=[0.3, 0.5], amplitude=[0.01], theta=[0.1, 0.2])
+    with pytest.raises(ValueError):
+        SinusoidalNoiseBernoulli(base=[0.3, 0.5], amplitude=0.01, theta=[0.1])
 
 
 def test_environment_rejects_zero_arms():
