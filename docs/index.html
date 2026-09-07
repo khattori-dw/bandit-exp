@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>bandit-exp — benchmark results</title>
+<title>bandit-exp</title>
 <style>
   :root {
     --bg: #0f1220;
@@ -13,7 +13,6 @@
     --muted: #9aa4c4;
     --grid: #313a5c;
     --good: #37d67a;
-    --bad: #ff6b6b;
     --accent: #6c8cff;
   }
   * { box-sizing: border-box; }
@@ -22,12 +21,9 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
     background: var(--bg);
     color: var(--text);
-    line-height: 1.5;
+    line-height: 1.6;
   }
-  header {
-    padding: 28px 32px 12px;
-    border-bottom: 1px solid var(--grid);
-  }
+  header { padding: 28px 32px 0; }
   h1 { margin: 0 0 4px; font-size: 22px; }
   .sub { color: var(--muted); font-size: 13px; }
   .config {
@@ -35,7 +31,25 @@
     font-size: 13px; color: var(--muted);
   }
   .config b { color: var(--text); }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 4px; margin: 20px 32px 0;
+    border-bottom: 1px solid var(--grid);
+  }
+  .tab {
+    background: none; border: none; color: var(--muted);
+    font-size: 14px; font-family: inherit; padding: 10px 16px;
+    cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 650; }
+
   main { padding: 24px 32px 64px; }
+  .panel-view { display: none; }
+  .panel-view.active { display: block; }
+
+  /* Results */
   .controls { margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
   .controls label { font-size: 13px; color: var(--muted); }
   select {
@@ -46,46 +60,102 @@
     background: var(--panel); border: 1px solid var(--grid);
     border-radius: 14px; padding: 20px 22px; margin-bottom: 22px;
   }
-  .env-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+  .env-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
   .env-name { font-size: 17px; font-weight: 650; }
-  .env-tag { font-size: 12px; color: var(--muted); background: var(--panel2); padding: 3px 9px; border-radius: 999px; }
+  .env-tag { font-size: 12px; color: var(--muted); background: var(--panel2); padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
   .rows { display: flex; flex-direction: column; gap: 9px; }
   .row { display: grid; grid-template-columns: 160px 1fr 96px; align-items: center; gap: 12px; }
-  .alg { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .alg { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .best .alg { color: var(--good); font-weight: 700; }
-  .bar-track { background: var(--panel2); border-radius: 7px; height: 22px; overflow: hidden; position: relative; }
+  .bar-track { background: var(--panel2); border-radius: 7px; height: 22px; overflow: hidden; }
   .bar-fill { height: 100%; border-radius: 7px 0 0 7px; transition: width .6s ease; }
   .val { font-variant-numeric: tabular-nums; text-align: right; font-size: 13px; color: var(--muted); }
   .best .val { color: var(--good); }
   .legend { font-size: 12px; color: var(--muted); margin-top: 6px; }
-  .note { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+  /* Cards (benchmarks / algorithms) */
+  .card {
+    background: var(--panel); border: 1px solid var(--grid);
+    border-radius: 14px; padding: 20px 24px; margin-bottom: 18px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card .meta { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .card p { margin: 8px 0; font-size: 14px; }
+  .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-top: 14px; margin-bottom: 2px; }
+  .intro { color: var(--muted); font-size: 14px; max-width: 780px; margin-bottom: 20px; }
+  code, .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--panel2); padding: 1px 6px; border-radius: 5px; font-size: 13px;
+  }
+  .formula {
+    display: block; background: var(--panel2); border-left: 3px solid var(--accent);
+    padding: 8px 12px; border-radius: 0 8px 8px 0; margin: 6px 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px;
+    overflow-x: auto;
+  }
+  .pill { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel2); color: var(--muted); margin-right: 6px; }
+  .arms { font-family: ui-monospace, monospace; font-size: 13px; color: var(--text); }
   footer { padding: 0 32px 40px; color: var(--muted); font-size: 12px; }
   a { color: var(--accent); }
 </style>
 </head>
 <body>
 <header>
-  <h1>bandit-exp — ベンチマーク結果</h1>
-  <div class="sub">全アルゴリズム × 全環境の比較（各環境でシード固定・同一報酬系列で公平に評価）</div>
+  <h1>bandit-exp</h1>
+  <div class="sub">いろんなバンディットアルゴリズムを、複数の問題設定で公平に比較するためのベンチマーク</div>
   <div class="config" id="config"></div>
 </header>
 
+<div class="tabs" id="tabs">
+  <button class="tab active" data-tab="results">結果</button>
+  <button class="tab" data-tab="benchmarks">ベンチマーク一覧</button>
+  <button class="tab" data-tab="algorithms">アルゴリズム一覧</button>
+</div>
+
 <main>
-  <div class="controls">
-    <label for="metric">指標:</label>
-    <select id="metric">
-      <option value="mean_cumulative_regret">累積リグレット (低いほど良い)</option>
-      <option value="mean_final_ctr">最終CTR (高いほど良い)</option>
-    </select>
-  </div>
-  <div id="charts"></div>
-  <div class="legend" id="legend"></div>
+  <!-- ===== Results ===== -->
+  <section class="panel-view active" id="view-results">
+    <div class="controls">
+      <label for="metric">指標:</label>
+      <select id="metric">
+        <option value="mean_cumulative_regret">累積リグレット (低いほど良い)</option>
+        <option value="mean_final_ctr">最終CTR (高いほど良い)</option>
+      </select>
+    </div>
+    <div id="charts"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <!-- ===== Benchmarks ===== -->
+  <section class="panel-view" id="view-benchmarks">
+    <div class="intro">
+      すべての問題設定は <b>ベルヌーイ・バンディット</b>（各腕を引くと 0/1 の報酬が返る）。
+      違いは「各腕のクリック確率が時間とともにどう決まるか」だけ。
+      各環境には乱数生成器を注入しており、シードを固定すれば全アルゴリズムを
+      <b>同一の報酬系列</b>で評価できる（＝公平な比較）。
+      <code>リグレット = Σ_t (最適腕の期待報酬 − 選んだ腕の期待報酬)</code>。
+    </div>
+    <div id="bench-cards"></div>
+  </section>
+
+  <!-- ===== Algorithms ===== -->
+  <section class="panel-view" id="view-algorithms">
+    <div class="intro">
+      各アルゴリズムは「どの腕を選んだか」と「得た 0/1 報酬」しか見ない
+      （環境の真の確率は決して覗かない）。これも公平性の担保。
+      表記: <span class="mono">n_i</span> = 腕 i の表示回数、
+      <span class="mono">c_i</span> = クリック回数、
+      <span class="mono">CTR_i = c_i / n_i</span>、
+      <span class="mono">N = Σ n_i</span>（総表示回数）。
+    </div>
+    <div id="alg-cards"></div>
+  </section>
 </main>
 
 <footer>
   Source: <a href="https://github.com/khattori-dw/bandit-exp">khattori-dw/bandit-exp</a> ·
   Data snapshot: <code>benchmark-20260907-084911.json</code>
-  (horizon=2000, 20 trials/pair) · self-contained, no external dependencies.
+  (horizon=2000, 20 trials/pair) · 自己完結・外部依存なし。
 </footer>
 
 <script>
@@ -136,22 +206,86 @@ const DATA = {
   }
 };
 
-const ENV_DESC = {
-  stationary_easy: "定常ベルヌーイ（3本, 固定CTR）",
-  gap_hard:        "難問（10本, gap=0.02）",
-  gap_easy:        "易問（10本, gap=0.25）",
-  drifting:        "非定常・線形ドリフト（3本）",
-  abrupt_change:   "非定常・急変（3本, t=1000で反転）"
-};
+// ---- Benchmark (environment) descriptions — match main.py make_env_specs() ----
+const ENVIRONMENTS = [
+  {
+    key: "stationary_easy", title: "stationary_easy",
+    cls: "StationaryBernoulli", tag: "定常 / 3本",
+    arms: "CTR = [0.10, 0.20, 0.50]（固定）",
+    desc: "各腕のクリック確率が最初から最後まで一定の、最も基本的な設定。最適腕は arm#2 (0.50)。学習アルゴリズムが定常環境でどれだけ素早く最適腕に集中できるかを見る。",
+    optimal: "arm#2 = 0.50（時間によらず一定）"
+  },
+  {
+    key: "gap_hard", title: "gap_hard",
+    cls: "GapBernoulli", tag: "定常 / 10本 / 難問",
+    arms: "最適腕 = 0.50、他9本 = 0.48（gap = 0.02）",
+    desc: "最適腕とそれ以外の差（gap）をわずか 0.02 に設定した難問。腕数も10本と多い。統計的に腕を区別するのが非常に難しく、探索にコストがかかる。どのアルゴリズムも差が付きにくい（＝理論上リグレットが小さくても学習の恩恵が見えにくい）ケース。",
+    optimal: "arm#0 = 0.50"
+  },
+  {
+    key: "gap_easy", title: "gap_easy",
+    cls: "GapBernoulli", tag: "定常 / 10本 / 易問",
+    arms: "最適腕 = 0.50、他9本 = 0.25（gap = 0.25）",
+    desc: "gap を 0.25 と大きく取った易しい設定。最適腕が明確に良いので、良い探索戦略ほど早く最適腕に到達し、下手な戦略（探索不足/過剰）との差が大きく開く。アルゴリズムの実力差が最も表れやすい。",
+    optimal: "arm#0 = 0.50"
+  },
+  {
+    key: "drifting", title: "drifting",
+    cls: "DriftingBernoulli", tag: "非定常 / 3本 / 線形ドリフト",
+    arms: "start = [0.1, 0.4, 0.7] → end = [0.7, 0.4, 0.1]（horizon=2000にかけて線形補間）",
+    desc: "各腕の確率が時間とともに線形に変化する非定常環境。arm#0 は徐々に上昇、arm#2 は下降し、途中で最適腕が入れ替わる。過去の推定に固執せず変化に追従できるかが問われる。",
+    optimal: "序盤は arm#2、中盤で3本が接近、終盤は arm#0（時間とともに移動）"
+  },
+  {
+    key: "abrupt_change", title: "abrupt_change",
+    cls: "AbruptChangeBernoulli", tag: "非定常 / 3本 / 急変",
+    arms: "before = [0.1, 0.2, 0.6]、after = [0.6, 0.2, 0.1]、change_at = 1000",
+    desc: "t=1000 で確率が突然入れ替わる非定常環境（レジームチェンジ）。前半の最適腕 arm#2 が後半は最悪腕になる。急変にどれだけ速く反応して乗り換えられるかが決定的。",
+    optimal: "t<1000: arm#2 = 0.60 / t≥1000: arm#0 = 0.60"
+  }
+];
 
-// higher-is-better metrics
+// ---- Algorithm descriptions — match src/bandit_exp/algorithms.py ----
+const ALGORITHMS = [
+  {
+    name: "Random", tags: ["ベースライン"],
+    desc: "毎回すべての腕から一様ランダムに選ぶ。学習を一切しないので、他アルゴリズムの下限（これに勝てなければ意味がない）として置く。",
+    rule: "choose = uniform(0 .. n-1)",
+    params: "なし"
+  },
+  {
+    name: "EGreedy(ε)", tags: ["探索:ε-greedy"],
+    desc: "確率 ε でランダムに探索し、そうでなければ現時点で経験CTRが最大の腕を活用（同点はランダムに選択）。ε が大きいほど探索的。本ベンチでは ε=0.01 と ε=0.1 を比較。ε が小さすぎると初期の誤った推定に固執しやすく、大きすぎると常に無駄な探索をする。",
+    rule: "確率 ε: ランダム探索 / 確率 1−ε: argmax_i CTR_i を活用",
+    params: "ε ∈ {0.01, 0.1}"
+  },
+  {
+    name: "ThomsonSampling", tags: ["ベイズ", "確率的"],
+    desc: "各腕のクリック率に Beta 事前分布を置き、事後分布 Beta(α+c_i, β+n_i−c_i) からサンプル θ_i を1つ引いて、最大の腕を選ぶ。不確実な腕ほどサンプルがばらつき自然に探索される。実装は標準ライブラリの random.betavariate を使用（numpy非依存）。",
+    rule: "θ_i ~ Beta(α + c_i, β + n_i − c_i);  choose = argmax_i θ_i",
+    params: "α = 1.0, β = 1.0（一様事前）"
+  },
+  {
+    name: "UCB1", tags: ["楽観的", "確定的"],
+    desc: "「不確実なものは楽観的に評価する」方針。各腕にまだ引いていなければ必ず1回引く。その後は経験CTRに探索ボーナス（引いた回数が少ない腕ほど大きい）を足した上側信頼限界が最大の腕を選ぶ。ランダム性なしで探索と活用を両立。",
+    rule: "θ_i = CTR_i + sqrt(2·ln N / n_i);  choose = argmax_i θ_i",
+    params: "なし（パラメータフリー）"
+  },
+  {
+    name: "UCB1Tuned", tags: ["楽観的", "分散考慮"],
+    desc: "UCB1 の改良版。ボーナス項に各腕の（ベルヌーイの）分散推定を取り込み、分散が小さい腕には無駄な探索を減らす。実務では素の UCB1 より安定して強いことが多い。",
+    rule: "V_i = CTR_i·(1−CTR_i) + sqrt(2·ln N / n_i);  θ_i = CTR_i + sqrt(ln N / n_i · min(1/4, V_i))",
+    params: "なし（パラメータフリー）"
+  }
+];
+
+const ENV_TAG = Object.fromEntries(ENVIRONMENTS.map(e => [e.key, e.tag]));
 const HIGHER_BETTER = new Set(["mean_final_ctr"]);
+function fmt(v, metric) { return metric === "mean_final_ctr" ? v.toFixed(4) : v.toFixed(2); }
+function esc(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
-function fmt(v, metric) {
-  return metric === "mean_final_ctr" ? v.toFixed(4) : v.toFixed(2);
-}
-
-function render() {
+// ---- Results tab ----
+function renderResults() {
   const metric = document.getElementById("metric").value;
   const higher = HIGHER_BETTER.has(metric);
   const charts = document.getElementById("charts");
@@ -160,18 +294,15 @@ function render() {
   for (const [envName, algs] of Object.entries(DATA.environments)) {
     const entries = Object.entries(algs).map(([name, m]) => ({ name, val: m[metric] }));
     const max = Math.max(...entries.map(e => e.val));
-    // best = min for regret, max for ctr
     const bestVal = higher ? Math.max(...entries.map(e => e.val)) : Math.min(...entries.map(e => e.val));
-
-    // sort: best first
     entries.sort((a, b) => higher ? b.val - a.val : a.val - b.val);
 
     const block = document.createElement("div");
     block.className = "env-block";
     block.innerHTML = `
       <div class="env-head">
-        <span class="env-name">${envName}</span>
-        <span class="env-tag">${ENV_DESC[envName] || ""}</span>
+        <span class="env-name">${esc(envName)}</span>
+        <span class="env-tag">${esc(ENV_TAG[envName] || "")}</span>
       </div>
       <div class="rows"></div>`;
     const rows = block.querySelector(".rows");
@@ -179,37 +310,76 @@ function render() {
     for (const e of entries) {
       const isBest = e.val === bestVal;
       const pct = max > 0 ? (e.val / max) * 100 : 0;
-      // color: green for good end of scale, red for bad
       const goodness = higher ? e.val / max : 1 - (e.val / max);
-      const hue = 0 + goodness * 130; // 0=red -> 130=green
+      const hue = goodness * 130;
       const row = document.createElement("div");
       row.className = "row" + (isBest ? " best" : "");
       row.innerHTML = `
-        <div class="alg">${isBest ? "★ " : ""}${e.name}</div>
-        <div class="bar-track">
-          <div class="bar-fill" style="width:${pct}%; background:hsl(${hue},70%,55%)"></div>
-        </div>
+        <div class="alg">${isBest ? "★ " : ""}${esc(e.name)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:hsl(${hue},70%,55%)"></div></div>
         <div class="val">${fmt(e.val, metric)}</div>`;
       rows.appendChild(row);
     }
     charts.appendChild(block);
   }
-
   document.getElementById("legend").textContent = higher
     ? "★ = 各環境で最良（最終CTRが最大）。バーが長い/緑ほど良い。"
     : "★ = 各環境で最良（累積リグレットが最小）。バーが短い/緑ほど良い。";
 }
 
-// config summary
+// ---- Benchmarks tab ----
+function renderBenchmarks() {
+  const el = document.getElementById("bench-cards");
+  el.innerHTML = ENVIRONMENTS.map(e => `
+    <div class="card">
+      <h3>${esc(e.title)} <span class="env-tag">${esc(e.tag)}</span></h3>
+      <div class="meta">クラス: <code>${esc(e.cls)}</code></div>
+      <p>${esc(e.desc)}</p>
+      <div class="label">腕の設定</div>
+      <div class="arms">${esc(e.arms)}</div>
+      <div class="label">最適腕</div>
+      <div class="arms">${esc(e.optimal)}</div>
+    </div>`).join("");
+}
+
+// ---- Algorithms tab ----
+function renderAlgorithms() {
+  const el = document.getElementById("alg-cards");
+  el.innerHTML = ALGORITHMS.map(a => `
+    <div class="card">
+      <h3>${esc(a.name)}</h3>
+      <div class="meta">${a.tags.map(t => `<span class="pill">${esc(t)}</span>`).join("")}</div>
+      <p>${esc(a.desc)}</p>
+      <div class="label">選択ルール</div>
+      <code class="formula">${esc(a.rule)}</code>
+      <div class="label">パラメータ</div>
+      <div class="arms">${esc(a.params)}</div>
+    </div>`).join("");
+}
+
+// ---- Tabs ----
+function activateTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  document.querySelectorAll(".panel-view").forEach(v => v.classList.toggle("active", v.id === "view-" + name));
+}
+document.getElementById("tabs").addEventListener("click", ev => {
+  const btn = ev.target.closest(".tab");
+  if (btn) activateTab(btn.dataset.tab);
+});
+
+// ---- Init ----
 const c = DATA.config;
 document.getElementById("config").innerHTML =
   `<span>horizon: <b>${c.horizon}</b></span>` +
   `<span>trials/組: <b>${c.num_trials}</b></span>` +
   `<span>base seed: <b>${c.base_seed}</b></span>` +
-  `<span>実行時間: <b>${c.elapsed_seconds}s</b></span>`;
+  `<span>環境数: <b>${Object.keys(DATA.environments).length}</b></span>` +
+  `<span>アルゴリズム数: <b>${ALGORITHMS.length}</b></span>`;
 
-document.getElementById("metric").addEventListener("change", render);
-render();
+document.getElementById("metric").addEventListener("change", renderResults);
+renderResults();
+renderBenchmarks();
+renderAlgorithms();
 </script>
 </body>
 </html>
