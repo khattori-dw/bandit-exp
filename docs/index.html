@@ -119,6 +119,14 @@
   }
   .pill { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel2); color: var(--muted); margin-right: 6px; }
   .arms { font-family: ui-monospace, monospace; font-size: 13px; color: var(--text); }
+  .alg-formula {
+    background: var(--panel2); border-left: 3px solid var(--accent);
+    padding: 8px 14px; border-radius: 0 8px 8px 0; margin: 4px 0; font-size: 15px;
+    overflow-x: auto; color: var(--text);
+  }
+  /* Hide until typeset (or plain fallback substituted) so raw LaTeX never flashes. */
+  .alg-formula:not(.ready) { visibility: hidden; }
+  .alg-formula.plain { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; color: var(--muted); }
   footer { padding: 0 32px 40px; color: var(--muted); font-size: 12px; }
   a { color: var(--accent); }
 </style>
@@ -301,31 +309,46 @@ const ALGORITHMS = [
   {
     name: "Random", tags: ["ベースライン"],
     desc: "毎回すべての腕から一様ランダムに選ぶ。学習を一切しないので、他アルゴリズムの下限（これに勝てなければ意味がない）として置く。",
-    rule: "choose = uniform(0 .. n-1)",
+    rule: {
+      tex: "a_t \\sim \\mathrm{Uniform}\\{0,1,\\dots,n-1\\}",
+      plain: "a_t ~ Uniform{0, 1, …, n−1}"
+    },
     params: "なし"
   },
   {
     name: "EGreedy(ε)", tags: ["探索:ε-greedy"],
     desc: "確率 ε でランダムに探索し、そうでなければ現時点で経験CTRが最大の腕を活用（同点はランダムに選択）。ε が大きいほど探索的。本ベンチでは ε=0.01 と ε=0.1 を比較。ε が小さすぎると初期の誤った推定に固執しやすく、大きすぎると常に無駄な探索をする。",
-    rule: "確率 ε: ランダム探索 / 確率 1−ε: argmax_i CTR_i を活用",
+    rule: {
+      tex: "a_t = \\begin{cases} \\text{ランダムな腕} & \\text{確率 } \\varepsilon \\\\ \\arg\\max_i \\mathrm{CTR}_i & \\text{確率 } 1-\\varepsilon \\end{cases}",
+      plain: "a_t = 確率 ε: ランダムな腕 / 確率 1−ε: argmax_i CTR_i"
+    },
     params: "ε ∈ {0.01, 0.1}"
   },
   {
     name: "ThomsonSampling", tags: ["ベイズ", "確率的"],
     desc: "各腕のクリック率に Beta 事前分布を置き、事後分布 Beta(α+c_i, β+n_i−c_i) からサンプル θ_i を1つ引いて、最大の腕を選ぶ。不確実な腕ほどサンプルがばらつき自然に探索される。実装は標準ライブラリの random.betavariate を使用（numpy非依存）。",
-    rule: "θ_i ~ Beta(α + c_i, β + n_i − c_i);  choose = argmax_i θ_i",
+    rule: {
+      tex: "\\theta_i \\sim \\mathrm{Beta}(\\alpha + c_i,\\; \\beta + n_i - c_i), \\quad a_t = \\arg\\max_i \\theta_i",
+      plain: "θ_i ~ Beta(α + c_i, β + n_i − c_i),  a_t = argmax_i θ_i"
+    },
     params: "α = 1.0, β = 1.0（一様事前）"
   },
   {
     name: "UCB1", tags: ["楽観的", "確定的"],
     desc: "「不確実なものは楽観的に評価する」方針。各腕にまだ引いていなければ必ず1回引く。その後は経験CTRに探索ボーナス（引いた回数が少ない腕ほど大きい）を足した上側信頼限界が最大の腕を選ぶ。ランダム性なしで探索と活用を両立。",
-    rule: "θ_i = CTR_i + sqrt(2·ln N / n_i);  choose = argmax_i θ_i",
+    rule: {
+      tex: "a_t = \\arg\\max_i \\left( \\mathrm{CTR}_i + \\sqrt{\\dfrac{2\\ln N}{n_i}} \\right)",
+      plain: "a_t = argmax_i ( CTR_i + sqrt(2·ln N / n_i) )"
+    },
     params: "なし（パラメータフリー）"
   },
   {
     name: "UCB1Tuned", tags: ["楽観的", "分散考慮"],
     desc: "UCB1 の改良版。ボーナス項に各腕の（ベルヌーイの）分散推定を取り込み、分散が小さい腕には無駄な探索を減らす。実務では素の UCB1 より安定して強いことが多い。",
-    rule: "V_i = CTR_i·(1−CTR_i) + sqrt(2·ln N / n_i);  θ_i = CTR_i + sqrt(ln N / n_i · min(1/4, V_i))",
+    rule: {
+      tex: "V_i = \\mathrm{CTR}_i(1-\\mathrm{CTR}_i) + \\sqrt{\\dfrac{2\\ln N}{n_i}}, \\quad a_t = \\arg\\max_i \\left( \\mathrm{CTR}_i + \\sqrt{\\dfrac{\\ln N}{n_i}\\, \\min\\!\\left(\\tfrac14, V_i\\right)} \\right)",
+      plain: "V_i = CTR_i·(1−CTR_i) + sqrt(2·ln N / n_i),  a_t = argmax_i ( CTR_i + sqrt( ln N / n_i · min(1/4, V_i) ) )"
+    },
     params: "なし（パラメータフリー）"
   }
 ];
@@ -486,16 +509,21 @@ function renderBenchmarks() {
 // ---- Algorithms tab ----
 function renderAlgorithms() {
   const el = document.getElementById("alg-cards");
-  el.innerHTML = ALGORITHMS.map(a => `
+  el.innerHTML = ALGORITHMS.map((a, idx) => `
     <div class="card">
       <h3>${esc(a.name)}</h3>
       <div class="meta">${a.tags.map(t => `<span class="pill">${esc(t)}</span>`).join("")}</div>
       <p>${esc(a.desc)}</p>
       <div class="label">選択ルール</div>
-      <code class="formula">${esc(a.rule)}</code>
+      <div class="alg-formula" id="alg-rule-${idx}"></div>
       <div class="label">パラメータ</div>
       <div class="arms">${esc(a.params)}</div>
     </div>`).join("");
+
+  // Typeset each selection rule with MathJax (falls back to plain text).
+  ALGORITHMS.forEach((a, idx) => {
+    renderMath(document.getElementById("alg-rule-" + idx), a.rule.tex, a.rule.plain, true);
+  });
 }
 
 // ---- Tabs ----
