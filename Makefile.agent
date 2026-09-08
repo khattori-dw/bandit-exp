@@ -1,0 +1,15 @@
+# Makefile.agent — LLM エージェント向けのレシピ集（GNU make ではない）
+
+.PHONY: issue
+issue:
+	GitHub の open issue を一つ対応して PR を投げる。手順:
+	1. `gh api "repos/khattori-dw/bandit-exp/issues?state=open" --jq '.[] | select(.pull_request == null) | {number, title, created_at}'` で open issue を一覧する（PR は除外済み）。
+	2. 対応する issue を一つ選ぶ。特に指定がなければ最も古い（created_at が最小の）ものを選ぶ。選んだ番号とタイトルを述べる。
+	3. `gh api repos/khattori-dw/bandit-exp/issues/<n>` と `.../issues/<n>/comments` で本文とコメントをすべて読み、要件を把握する。曖昧なら憶測で進めず確認する。
+	4. `main` を最新化してから、その issue 専用のブランチを一本切る（例 `feature/issue-<n>-<slug>`）。1 Issue = 1 PR = 1 branch を厳守する。同じ issue の追加要望は同じブランチ/PR に積み、新しい/スタック PR は作らない。
+	5. 要件を実装する。コードを変えたらテスト（`make test` 相当: `uv run pytest -q`、無ければ 3.13 の python で pytest）を通す。ベンチや docs に影響するなら `main.py` を再実行し、必要なら結果を docs に反映する。
+	6. 変更をコミットし（メッセージ本文に `Closes #<n>` を入れる）、`git push -u origin <branch>` する。`main`/`master` へ直接コミットしない。
+	7. `gh api repos/khattori-dw/bandit-exp/pulls -f title="..." -f body="..." -f head="<branch>" -f base="main"` で PR を作る（`gh pr create` は使わない）。本文に要約・テスト内容・`Closes #<n>` を書く。
+	8. 作成した PR の `html_url` を報告する。
+
+# vim: set ft=make:
